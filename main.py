@@ -3,6 +3,16 @@ import google.generativeai as genai
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+import PIL.Image
+from vertexai.generative_models import (
+    GenerativeModel,
+    HarmCategory,
+    HarmBlockThreshold,
+    Part,
+    SafetySetting,
+    GenerationConfig
+)
+
 
 # Load the environment variables
 load_dotenv()
@@ -17,37 +27,28 @@ else:
 # Streamlit app setup
 st.title("Bump Generator")
 st.markdown("Upload an image, provide a prompt, and get AI-generated output.")
-
-# Image upload
-uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
 prompt = st.text_input("Enter your prompt")
 
+safety_settings =  [{"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}]
+
+
+
 if st.button("Generate Output"):
-    if not uploaded_file:
-        st.error("Please upload an image.")
-    elif not prompt:
+    if not prompt:
         st.error("Please enter a prompt.")
     else:
-        # Save the uploaded file temporarily
-        assets_dir = Path("assets")
-        assets_dir.mkdir(exist_ok=True)  # Create the assets directory if it doesn't exist
-        image_path = assets_dir / uploaded_file.name  # Create a dynamic file path
+        image_path = r'assets/sample2.png'
+        image_file = PIL.Image.open(image_path)
         
-        with open(image_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-
-        print(image_path)
         try:
-            # Prepare image data for API
-            image_part = {
-                "mime_type": "image/png" if image_path.suffix == ".png" else "image/jpeg",
-                "data": image_path.read_bytes(),
-            }
 
             # Simulate API call (adjust as needed for your API's requirements)
             model = genai.GenerativeModel("gemini-1.5-pro")
-            contents = [str(image_part), prompt]
-            response = model.generate_content(contents)
+            contents = [f'{prompt}:\n',image_file]
+            response = model.generate_content(contents, safety_settings=safety_settings)
 
             # Display results
             st.image(image_path, caption="Uploaded Image", use_column_width=True)
@@ -55,10 +56,3 @@ if st.button("Generate Output"):
             st.write(response.text)
         except Exception as e:
             st.error(f"An error occurred: {str(e)}")
-        finally:
-            # Cleanup: Delete the temporary file
-            try:
-                image_path.unlink()
-                st.info(f"Temporary file deleted: {image_path}")
-            except Exception as cleanup_error:
-                st.error(f"Error deleting temporary file: {str(cleanup_error)}")
