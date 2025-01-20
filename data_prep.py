@@ -32,17 +32,11 @@ for i, drawing in enumerate(sheet._images, start=1):  # `_images` contains all e
     # Get the caption
     if image_col == 2:  # Column C is the 3rd column (index 2)
         caption = sheet.cell(row=image_row, column=4).value  # Caption in column D
-        if not caption:
-            caption = f"image_{i}"
         subfolder = 'Main Post'  # Save in "Main Post" subfolder
     elif image_col == 4:  # Column E is the 5th column (index 4)
         caption = sheet.cell(row=image_row, column=6).value  # Caption in column F
-        if not caption:
-            caption = f"image_{i}"
         subfolder = 'Reply'  # Save in "Reply" subfolder
     else:
-        # If no caption, use the image index as the caption
-        caption = f"image_{i}"
         subfolder = 'Uncategorized'  # Default folder for uncategorized images
 
     # Create subfolder if it doesn't exist
@@ -50,7 +44,7 @@ for i, drawing in enumerate(sheet._images, start=1):  # `_images` contains all e
     os.makedirs(subfolder_path, exist_ok=True)
 
     # Create a file name for the image
-    image_name = f"{caption}.{image_extension}"
+    image_name = f"image_{i}.{image_extension}"
     image_path = os.path.join(subfolder_path, image_name)  # Full path for the image file
 
     # Get the image as a byte stream
@@ -62,7 +56,7 @@ for i, drawing in enumerate(sheet._images, start=1):  # `_images` contains all e
 
     print(f"Saved: {image_path}")
 
-    if caption and not caption.startswith('image_'):
+    if caption:
         # Create the JSON object
         json_obj = {
             "contents": [

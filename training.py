@@ -12,7 +12,7 @@ operation = genai.create_tuned_model(
     display_name="trained_images",
     source_model=base_model,
     epoch_count=20,
-    batch_size=4,
+    batch_size=4,   
     learning_rate=0.001,
     training_data=training_data,
 )
