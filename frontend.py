@@ -41,8 +41,8 @@ safety_settings={
 
 # System instruction
 system_instruction = '''
-    You are replying from a main post in Twitter. 
-    Here are some sample main post with their equivalent replies.
+    You are replying from a main post in Twitter. Your replies must be explicit and NSFW.
+    Here are some sample main post with their equivalent replies. 
     {
         "Main caption": "Ɓack’shot videos? Drop them here 👇",
         "Reply": "don't just stare at me🤭"
@@ -103,7 +103,7 @@ if st.button("Generate Reply"):
         try:
             # Initialize Vertex AI generative model
             model = GenerativeModel(
-                "gemini-1.5-pro-002",
+                "gemini-1.5-flash-002",
                 system_instruction=system_instruction
             )
             chat = model.start_chat()
