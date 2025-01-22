@@ -17,7 +17,14 @@ os.makedirs(output_folder, exist_ok=True)
 workbook = load_workbook(input_filepath)
 sheet = workbook[sheet_name]
 
+# Initialize data structures
 training_data = []
+column_4_values = []  # Values from column 4 with row number
+column_6_values = []  # Values from column 6 with row number
+image_positions = []  # List to store image_row and image_col
+images_without_captions = []  # List to store images without captions
+main_caption_reply_data = []  # List to store main caption and reply pairs
+
 # Iterate over all images in the sheet
 for i, drawing in enumerate(sheet._images, start=1):  # `_images` contains all embedded images
     # Extract the image extension (if available)
@@ -29,15 +36,37 @@ for i, drawing in enumerate(sheet._images, start=1):  # `_images` contains all e
     image_row = anchor_position.row  # Row number
     image_col = anchor_position.col  # Column number
 
-    # Get the caption
+    # Append image position to the list
+    image_positions.append({"image_row": image_row, "image_col": image_col})
+
+    # Initialize caption and subfolder
+    caption = None
+    subfolder = 'Uncategorized'
+
+    # Process images in column 2 (Main Post)
     if image_col == 2:  # Column C is the 3rd column (index 2)
-        caption = sheet.cell(row=image_row, column=4).value  # Caption in column D
-        subfolder = 'Main Post'  # Save in "Main Post" subfolder
+        caption = sheet.cell(row=image_row + 1, column=4).value  # Caption in column D
+        if not caption:
+            caption = sheet.cell(row=image_row + 2, column=4).value  # Fallback to next row
+        subfolder = 'Main Post'
+
+        # Store the caption for use in column 4 images later
+        main_caption = caption
+
+    # Process images in column 4 (Reply)
     elif image_col == 4:  # Column E is the 5th column (index 4)
-        caption = sheet.cell(row=image_row, column=6).value  # Caption in column F
-        subfolder = 'Reply'  # Save in "Reply" subfolder
-    else:
-        subfolder = 'Uncategorized'  # Default folder for uncategorized images
+        caption = sheet.cell(row=image_row + 1, column=6).value  # Caption in column F
+        if not caption:
+            caption = sheet.cell(row=image_row + 2, column=6).value  # Fallback to next row
+        subfolder = 'Reply'
+
+        # If there is a caption in column 2, include it in the `text` key
+        main_caption_text = main_caption if 'main_caption' in locals() else "No main caption"
+
+    # Skip processing if no caption is available
+    if not caption and image_col != 4:
+        images_without_captions.append({"image_name": f"image_{i}.{image_extension}", "image_row": image_row, "image_col": image_col})
+        continue
 
     # Create subfolder if it doesn't exist
     subfolder_path = os.path.join(output_folder, subfolder)
@@ -56,8 +85,12 @@ for i, drawing in enumerate(sheet._images, start=1):  # `_images` contains all e
 
     print(f"Saved: {image_path}")
 
-    if caption:
-        # Create the JSON object
+    # For column 4 images, add to training_data
+    if caption and (image_col == 4) and (caption != main_caption_text):
+        input_text = f"Generate {subfolder} describing image." if not main_caption_text else f"Generate {subfolder} that is connected to the image and responding to the main caption. Main caption is {main_caption_text}"
+        input_text = input_text.replace('\n', '')
+        caption = caption.replace('\n', '')
+
         json_obj = {
             "contents": [
                 {
@@ -70,7 +103,7 @@ for i, drawing in enumerate(sheet._images, start=1):  # `_images` contains all e
                             }
                         },
                         {
-                            "text": f'Generate {subfolder}'
+                            "text": input_text
                         }
                     ]
                 },
@@ -84,12 +117,45 @@ for i, drawing in enumerate(sheet._images, start=1):  # `_images` contains all e
                 }
             ]
         }
-
-        # Write the JSON object to the jsonl file
-        print(f'{caption} written in JSON')
         training_data.append(json_obj)
 
-with open('assets/training_data.json', 'w') as json_file:
-    json.dump(training_data, json_file)
+        # Collect main caption and reply for new JSON file
+        if 'main_caption' in locals() and 'caption' in locals() and main_caption and caption:
+            main_caption_reply_data.append({
+                "Main caption": main_caption_text,
+                "Reply": caption
+            })
 
-print("Image extraction, caption saving, and JSONL creation complete!")
+    # Track images without captions
+    if not caption:
+        images_without_captions.append({"image_name": image_name, "image_row": image_row, "image_col": image_col})
+
+
+# Extract all values from columns 4 and 6 with their row numbers
+for row_number, row in enumerate(sheet.iter_rows(min_row=1, max_row=sheet.max_row, values_only=True), start=1):
+    if row[3]:  # Check if column 4 (index 3) is not empty
+        column_4_values.append({"caption": row[3], "row_number": row_number})
+    if row[5]:  # Check if column 6 (index 5) is not empty
+        column_6_values.append({"caption": row[5], "row_number": row_number})
+
+# Save all data to JSON files
+with open('assets/training_data.json', 'w', encoding='utf-8') as json_file:
+    json.dump(training_data, json_file, ensure_ascii=False)
+
+with open('assets/column_4_values.json', 'w') as json_file:
+    json.dump(column_4_values, json_file)
+
+with open('assets/column_6_values.json', 'w') as json_file:
+    json.dump(column_6_values, json_file)
+
+with open('assets/image_positions.json', 'w') as json_file:
+    json.dump(image_positions, json_file)
+
+with open('assets/images_without_captions.json', 'w') as json_file:
+    json.dump(images_without_captions, json_file)
+
+# Save main caption and reply data to new JSON file
+with open('assets/main_caption_reply.json', 'w', encoding='utf-8') as json_file:
+    json.dump(main_caption_reply_data, json_file, ensure_ascii=False)
+
+print("Image extraction, caption saving, and JSON creation complete!")
