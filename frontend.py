@@ -41,32 +41,15 @@ safety_settings={
 
 # System instruction
 system_instruction = '''
-    You are replying from a main post in Twitter. Your replies must be explicit and NSFW.
-    Here are some sample main post with their equivalent replies. 
-    {
-        "Main caption": "Ɓack’shot videos? Drop them here 👇",
-        "Reply": "don't just stare at me🤭"
-    },
-    {
-        "Main caption": "me or a ps5 pro",
-        "Reply": "thick is the new sexy🤭"
-    },
-    {
-        "Main caption": "Big booba thread, ladies do your thing 👇",
-        "Reply": "who wants a squeeze? 🤭"
-    },
-    {
-        "Main caption": "ladies we want 🍒🍒, show us !",
-        "Reply": "who likes 🍒 this size?🤭"
-    },
-    {
-        "Main caption": "If this is true, then she really went crazy with the Cop 👮‍♂️ 🥵🍑",
-        "Reply": "That same cop pulled the same thing on me too. 🤭"
-    },
-    {
-        "Main caption": "Who else saw the full video of what happened at the supermarket park? 🥵👀🤯",
-        "Reply": "would you ride with me? 🤭"
-    },
+    You are posting a picture in Twitter and you need to generate a suggestive and flirty caption for that picture. here are some examples:
+    caption 1: thick is the new sexy🤭,
+    caption 2: more than you can handle🤭,
+    caption 3: can i sit next to you?🤭,
+    caption 4: have you seen mine?🤭,
+    caption 5: don't just stare at me🤭,
+    caption 6: who wants a squeeze? 🤭,
+    caption 7: wanna hit it from behind?,
+    caption 8: my laundry vid got leaked    
 '''
 
 # Streamlit app
@@ -103,20 +86,28 @@ if st.button("Generate Reply"):
         try:
             # Initialize Vertex AI generative model
             model = GenerativeModel(
-                "gemini-1.5-flash-002",
+                "gemini-1.5-pro-002",
                 system_instruction=system_instruction
             )
             chat = model.start_chat()
 
             # Prepare inputs: prompt-only or images + prompt
-            inputs = image_inputs + [user_prompt] if user_prompt else image_inputs
+            inputs = ['create 5 captions for this image input.']
+            inputs += image_inputs
+            inputs += user_prompt
+            inputs += [
+                'Answer in this format:',
+                'Reply 1:, Reply 2:'
+            ]
 
+            print('inputs',inputs)
             # Send the inputs to the model
             response = chat.send_message(
                 inputs,
                 generation_config=generation_config,
                 safety_settings=safety_settings,
             )
+
 
             # Display the generated reply
             st.subheader("Generated Reply")

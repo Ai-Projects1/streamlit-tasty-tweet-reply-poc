@@ -103,7 +103,7 @@ for i, drawing in enumerate(sheet._images, start=1):  # `_images` contains all e
                             }
                         },
                         {
-                            "text": input_text
+                            "text": ''
                         }
                     ]
                 },
