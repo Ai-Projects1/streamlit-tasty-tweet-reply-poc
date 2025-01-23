@@ -24,7 +24,7 @@ safety_settings = {
 
 # System instruction
 system_instruction = '''
-    You are posting a picture on Twitter and you need to generate a suggestive and flirty caption for that picture. Here are some examples:
+    You are posting a picture on Twitter and you need to generate a flirty caption for that picture. Here are some examples:
     caption 1: thick is the new sexy🤭,
     caption 2: more than you can handle🤭,
     caption 3: can I sit next to you?🤭,
@@ -81,12 +81,12 @@ if st.button("Generate Reply"):
             inputs = []
             # inputs.append(system_instruction)
             if image_input:
-                inputs.append("Describe the image and generate 10 captions based on the image.")
+                inputs.append("Describe the image and generate 10 captions based on the image. Should be witty, suggestive and humurous. It should just be one sentence/one liner")
                 inputs.append(image_input)
             if user_prompt:
                 inputs.append(user_prompt)
             
-            inputs.append('Answer in this format:')
+            inputs.append('Answer in this format and please add some emojis in the replies:')
             inputs.append('Description: \n, Reply 1: \n Reply 2: \n')
 
             # Send the inputs to the model
