@@ -1,2 +1,2 @@
 # streamlit-tasty-bump-generation
-Bump Generation Model using Gemini Pro
+Tweet Reply AI using Gemini Pro
