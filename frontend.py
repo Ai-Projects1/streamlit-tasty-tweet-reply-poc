@@ -14,6 +14,8 @@ generation_config = {
     "top_p": 0.95,
 }
 
+vertexai.init(project="groovy-legacy-438407-u5", location="us-central1")
+
 # Safety settings for Vertex AI
 safety_settings = {
     HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.OFF,
