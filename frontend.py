@@ -6,6 +6,16 @@ import streamlit as st
 import io
 import tempfile
 import os
+import json
+import requests
+from google.oauth2 import service_account
+
+# Load service account credentials
+with open('authentication_creds.json') as f:
+    credentials_dict = json.load(f)
+
+# Create credentials object
+credentials = service_account.Credentials.from_service_account_info(credentials_dict)
 
 # Generation config for Vertex AI
 generation_config = {
@@ -14,7 +24,12 @@ generation_config = {
     "top_p": 0.95,
 }
 
-vertexai.init(project="groovy-legacy-438407-u5", location="us-central1")
+# Initialize Vertex AI with credentials
+vertexai.init(
+    project="groovy-legacy-438407-u5",
+    location="us-central1",
+    credentials=credentials
+)
 
 # Safety settings for Vertex AI
 safety_settings = {
@@ -39,72 +54,107 @@ system_instruction = '''
 
 # Streamlit app
 st.title("Twitter Reply AI Model")
-st.text("Upload an image and provide a prompt for reply generation")
+st.text("Enter up to 8 image URLs and provide a prompt for reply generation")
 
-# File uploader for a single image
-uploaded_file = st.file_uploader("Upload an image (only one allowed)", type=["png", "jpg", "jpeg"], accept_multiple_files=False)
+# URL input for multiple images
+urls = []
+for i in range(8):
+    url = st.text_input(f"Image URL {i+1}", key=f"url_{i}")
+    if url:
+        urls.append(url)
 
-# Placeholder for image input
-image_input = None
-if uploaded_file:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as temp_file:
-        temp_file.write(uploaded_file.getbuffer())
-        temp_file_path = temp_file.name  # Get the full path to the file
+# Limit to 8 URLs
+if len(urls) > 8:
+    st.warning("Maximum 8 images allowed. Only the first 8 will be processed.")
+    urls = urls[:8]
 
-        print('temp_file_path',temp_file_path)
-    image = PILImage.open(uploaded_file)
-    st.image(image, caption=f"Uploaded: {uploaded_file.name}", use_column_width=True)
+# Placeholder for image inputs
+image_inputs = []
+temp_file_paths = []
+images = []  # Store PIL images for reuse
 
-    # Convert image to base64
-    if image.mode in ("RGBA", "LA"):
-        image = image.convert("RGB")
-    image.thumbnail((300, 300))  # Resize to reduce size
-    buffer = io.BytesIO()
-    image.save(buffer, format="JPEG", quality=50)  # Compress and save as JPEG
-    buffer.seek(0)
-    encoded_image = base64.b64encode(buffer.read()).decode("utf-8")
-    image_input = Part.from_image(Image.load_from_file(temp_file_path))
+if urls:
+    # Create columns for displaying images
+    cols = st.columns(min(4, len(urls)))
+    
+    for idx, url in enumerate(urls):
+        try:
+            # Download image from URL
+            response = requests.get(url)
+            if response.status_code == 200:
+                # Create temporary file
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
+                    temp_file.write(response.content)
+                    temp_file_path = temp_file.name
+                    temp_file_paths.append(temp_file_path)
+                    
+                    # Display image in a column
+                    with cols[idx % 4]:
+                        image = PILImage.open(io.BytesIO(response.content))
+                        images.append(image.copy())  # Store a copy of the image
+                        st.image(image, caption=f"Image {idx + 1}", use_container_width=True)
+                        
+                        # Convert image to base64
+                        if image.mode in ("RGBA", "LA"):
+                            image = image.convert("RGB")
+                        image.thumbnail((300, 300))  # Resize to reduce size
+                        buffer = io.BytesIO()
+                        image.save(buffer, format="JPEG", quality=50)  # Compress and save as JPEG
+                        buffer.seek(0)
+                        encoded_image = base64.b64encode(buffer.read()).decode("utf-8")
+                        image_inputs.append(Part.from_image(Image.load_from_file(temp_file_path)))
+            else:
+                st.error(f"Failed to load image from URL {idx + 1}")
+        except Exception as e:
+            st.error(f"Error processing image {idx + 1}: {str(e)}")
 
 # Text input for prompt
 user_prompt = st.text_area("Enter your prompt here", "")
 
 # Submit button
-if st.button("Generate Reply"):
-    if user_prompt or image_input:  # Allow generation with either prompt or an image
+if st.button("Generate Replies"):
+    if user_prompt or image_inputs:  # Allow generation with either prompt or images
         try:
             # Initialize Vertex AI generative model
             model = GenerativeModel(
                 "gemini-1.5-flash-002",
-                # system_instruction=system_instruction
             )
-            chat = model.start_chat()
-
-            # Prepare inputs: prompt-only or image + prompt
-            inputs = []
-            # inputs.append(system_instruction)
-            if image_input:
+            
+            # Process each image
+            for idx, (image_input, temp_file_path) in enumerate(zip(image_inputs, temp_file_paths)):
+                st.subheader(f"Generated Reply for Image {idx + 1}")
+                # Display the image again in the results section
+                st.image(images[idx], use_container_width=True)
+                
+                chat = model.start_chat()
+                
+                # Prepare inputs
+                inputs = []
                 inputs.append("Describe the image and generate 10 captions based on the image. Should be witty, suggestive and humurous. It should just be one sentence/one liner")
                 inputs.append(image_input)
-            if user_prompt:
-                inputs.append(user_prompt)
-            
-            inputs.append('Answer in this format and please add some emojis in the replies:')
-            inputs.append('Description: \n, Reply 1: \n Reply 2: \n')
+                if user_prompt:
+                    inputs.append(user_prompt)
+                
+                inputs.append('Answer in this format and please add some emojis in the replies:')
+                inputs.append('Description: \n, Reply 1: \n Reply 2: \n')
 
-            # Send the inputs to the model
-            response = chat.send_message(
-                inputs,
-                generation_config=generation_config,
-                safety_settings=safety_settings,
-            )
+                # Send the inputs to the model
+                response = chat.send_message(
+                    inputs,
+                    generation_config=generation_config,
+                    safety_settings=safety_settings,
+                )
 
-            # Display the generated reply
-            st.subheader("Generated Reply")
-            st.write(response.text)
+                # Display the generated reply
+                st.write(response.text)
+                st.markdown("---")  # Add a separator between images
 
-            if os.path.exists(temp_file_path):
-                os.remove(temp_file_path)
+            # Clean up temporary files
+            for temp_file_path in temp_file_paths:
+                if os.path.exists(temp_file_path):
+                    os.remove(temp_file_path)
+                    
         except Exception as e:
             st.error(f"An error occurred: {e}")
     else:
-        st.warning("Please enter a prompt or upload an image before generating a reply.")
+        st.warning("Please enter a prompt or provide image URLs before generating replies.")
