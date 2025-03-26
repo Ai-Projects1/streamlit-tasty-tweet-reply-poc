@@ -11,11 +11,10 @@ import requests
 from google.oauth2 import service_account
 
 # Load service account credentials
-with open('authentication_creds.json') as f:
-    credentials_dict = json.load(f)
+# s
 
 # Create credentials object
-credentials = service_account.Credentials.from_service_account_info(credentials_dict)
+# credentials = service_account.Credentials.from_service_account_info(credentials_dict)
 
 # Generation config for Vertex AI
 generation_config = {
@@ -25,11 +24,11 @@ generation_config = {
 }
 
 # Initialize Vertex AI with credentials
-vertexai.init(
-    project="groovy-legacy-438407-u5",
-    location="us-central1",
-    credentials=credentials
-)
+# vertexai.init(
+#     project="groovy-legacy-438407-u5",
+#     location="us-central1",
+#     credentials=credentials
+# )
 
 # Safety settings for Vertex AI
 safety_settings = {
