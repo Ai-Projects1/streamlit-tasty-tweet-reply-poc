@@ -54,14 +54,18 @@ system_instruction = '''
 
 # Streamlit app
 st.title("Twitter Reply AI Model")
-st.text("Enter up to 8 image URLs and provide a prompt for reply generation")
+st.text("Enter image URLs (one per line or separated by commas) and provide a prompt for reply generation")
 
-# URL input for multiple images
+# Single textbox for multiple URLs
+urls_input = st.text_area("Image URLs", 
+                         help="Enter multiple image URLs (one per line or separated by commas). Maximum 8 images allowed.")
+
+# Process URLs
 urls = []
-for i in range(8):
-    url = st.text_input(f"Image URL {i+1}", key=f"url_{i}")
-    if url:
-        urls.append(url)
+if urls_input:
+    # Split by both newlines and commas, then clean up
+    raw_urls = [url.strip() for url in urls_input.replace(',', '\n').split('\n')]
+    urls = [url for url in raw_urls if url]  # Remove empty strings
 
 # Limit to 8 URLs
 if len(urls) > 8:
