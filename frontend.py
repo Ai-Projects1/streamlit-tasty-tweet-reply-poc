@@ -171,7 +171,7 @@ if urls:
         with preview_col:
             st.markdown("<h3>Preview Images</h3>", unsafe_allow_html=True)
             # Create columns for displaying images
-            cols = st.columns(min(3, len(urls)))
+            cols = st.columns(min(4, len(urls)))  # Changed from 3 to 4
             
             for idx, url in enumerate(urls):
                 try:
@@ -185,7 +185,7 @@ if urls:
                             temp_file_paths.append(temp_file_path)
                             
                             # Display image in a column
-                            with cols[idx % 3]:
+                            with cols[idx % 4]:  # Changed from 3 to 4
                                 image = PILImage.open(io.BytesIO(response.content))
                                 images.append(image.copy())  # Store a copy of the image
                                 st.image(image, caption=f"Image {idx + 1}", use_container_width=True)
@@ -213,8 +213,8 @@ if generate_button:
                 "gemini-1.5-flash-002",
             )
             
-            # Process images in groups of 3 (or 1 on mobile)
-            group_size = 1 if st.session_state.get('mobile_view', False) else 3
+            # Process images in groups of 4 (or 1 on mobile)
+            group_size = 1 if st.session_state.get('mobile_view', False) else 4  # Changed from 3 to 4
             for i in range(0, len(image_inputs), group_size):
                 # Create columns for displaying results
                 result_cols = st.columns(group_size)
