@@ -1,4 +1,6 @@
 import base64
+import vertexai
+from vertexai.generative_models import GenerativeModel, SafetySetting, Part,Image, HarmCategory, HarmBlockThreshold
 from PIL import Image as PILImage
 import streamlit as st
 import io
@@ -7,25 +9,7 @@ import os
 import json
 import requests
 from google.oauth2 import service_account
-from google.cloud import aiplatform
-from dotenv import load_dotenv
 
-load_dotenv()
-# Initialize the Vertex AI Endpoint
-ENDPOINT = aiplatform.Endpoint(
-    endpoint_name=os.environ['ENDPOINT_NAME']
-)
-MAX_TOKENS = 256
-TEMPERATURE = 1
-TOP_P = 0.95
-
-def predict(instances):
-    """Send prediction request to the endpoint."""
-    response = ENDPOINT.predict(instances=instances)
-    if response.predictions:
-        return response.predictions
-    else:
-        return response
 # Set page config to wide mode
 st.set_page_config(layout="wide")
 
@@ -103,6 +87,33 @@ generation_config = {
     "top_p": 0.95,
 }
 
+# Initialize Vertex AI with credentials
+# vertexai.init(
+#     project="groovy-legacy-438407-u5",
+#     location="us-central1",
+#     credentials=credentials
+# )
+
+# Safety settings for Vertex AI
+safety_settings = {
+    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.OFF,
+    HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.OFF,
+    HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.OFF,
+    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.OFF,
+}
+
+# System instruction
+system_instruction = '''
+    You are posting a picture on Twitter and you need to generate a flirty caption for that picture. Here are some examples:
+    caption 1: thick is the new sexy🤭,
+    caption 2: more than you can handle🤭,
+    caption 3: can I sit next to you?🤭,
+    caption 4: have you seen mine?🤭,
+    caption 5: don't just stare at me🤭,
+    caption 6: who wants a squeeze? 🤭,
+    caption 7: wanna hit it from behind?,
+    caption 8: my laundry vid got leaked
+'''
 
 # Streamlit app
 st.markdown('<div class="title-container"><h1>Bump Gen AI</h1></div>', unsafe_allow_html=True)
@@ -176,7 +187,7 @@ if urls:
                             with cols[idx % 3]:  # Changed back to 3
                                 image = PILImage.open(io.BytesIO(response.content))
                                 images.append(image.copy())  # Store a copy of the image
-                                st.image(image, caption=f"Image {idx + 1}", use_column_width=True)
+                                st.image(image, caption=f"Image {idx + 1}", use_container_width=True)
                                 
                                 # Convert image to base64
                                 if image.mode in ("RGBA", "LA"):
@@ -186,8 +197,7 @@ if urls:
                                 image.save(buffer, format="JPEG", quality=50)  # Compress and save as JPEG
                                 buffer.seek(0)
                                 encoded_image = base64.b64encode(buffer.read()).decode("utf-8")
-                                image_inputs.append(url)
-
+                                image_inputs.append(Part.from_image(Image.load_from_file(temp_file_path)))
                     else:
                         st.error(f"Failed to load image from URL {idx + 1}")
                 except Exception as e:
@@ -197,7 +207,10 @@ if urls:
 if generate_button:
     if user_prompt or image_inputs:  # Allow generation with either prompt or images
         try:
-
+            # Initialize Vertex AI generative model
+            model = GenerativeModel(
+                "gemini-1.5-flash-002",
+            )
             
             # Process images in groups of 3 (or 1 on mobile)
             group_size = 1 if st.session_state.get('mobile_view', False) else 3  # Changed back to 3
@@ -216,37 +229,29 @@ if generate_button:
                             )
                             
                             # Display the image with responsive width
-                            st.image(images[idx], use_column_width=True)
+                            st.image(images[idx], use_container_width=True)
                             
-                            # Send the inputs to the model
-                            prompt =  '''
-                                Generate exactly **10** witty, suggestive, and humorous captions based on the given image.  
-                                Each caption must be a **short, clever one-liner** with a **playful** and **humorous** tone.  
-
-                                ⚠️ **Only 10 captions. Do NOT exceed this limit.**  
-
-                                Format the response as follows, including emojis:  
-                                Caption 1: [Caption text] 😆  \n
-                                Caption 2: [Caption text] 🤭  \n
-                                ...  
-                                Caption 10: [Caption text] 🎭  \n
-                            '''
+                            chat = model.start_chat()
+                            
+                            # Prepare inputs
+                            inputs = []
+                            inputs.append("Describe the image and generate 10 captions based on the image. Should be witty, suggestive and humurous. It should just be one sentence/one liner")
+                            inputs.append(image_inputs[idx])
                             if user_prompt:
-                                prompt += user_prompt
+                                inputs.append(user_prompt)
                             
-                            instances = [
-                                    {
-                                        "prompt": prompt,
-                                        "multi_modal_data": {"image": image_inputs[idx]},
-                                        "max_tokens": MAX_TOKENS,
-                                        "temperature": TEMPERATURE,
-                                        "top_p": TOP_P,
-                                    },
-                                ]
-                            response = predict(instances)
-                            print(response)
+                            inputs.append('Answer in this format and please add some emojis in the replies:')
+                            inputs.append('Description: \n, Reply 1: \n Reply 2: \n')
+
+                            # Send the inputs to the model
+                            response = chat.send_message(
+                                inputs,
+                                generation_config=generation_config,
+                                safety_settings=safety_settings,
+                            )
+
                             # Display the generated reply in a card-like container
-                            response_text = response[0].split('Output')[1].replace('\n', '<br>')
+                            response_text = response.text.replace('\n', '<br>')
                             st.markdown(
                                 f"<div style='background-color: white; padding: 1rem; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.12);'>{response_text}</div>",
                                 unsafe_allow_html=True
