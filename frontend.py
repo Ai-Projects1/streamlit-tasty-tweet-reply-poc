@@ -44,7 +44,39 @@ st.markdown("""
     .title-container h1 {
         font-size: 2.5rem;
         font-weight: bold;
-        color: #262730;
+        color: #262730 !important;
+    }
+    
+    /* Card styles with dark mode support */
+    .header-card {
+        background-color: #f0f2f6 !important;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    .header-card h3 {
+        color: #262730 !important;
+        margin: 0;
+    }
+    
+    .content-card {
+        background-color: #ffffff !important;
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        color: #262730 !important;
+    }
+    
+    .content-card .description {
+        font-weight: bold;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .content-card .reply {
+        padding: 0.5rem 0;
+        margin: 0.25rem 0;
     }
     
     /* Responsive container */
@@ -69,6 +101,27 @@ st.markdown("""
         .results-container {
             flex-direction: row;
             flex-wrap: wrap;
+        }
+    }
+
+    /* Dark mode overrides */
+    @media (prefers-color-scheme: dark) {
+        .title-container h1 {
+            color: #ffffff !important;
+        }
+        .header-card {
+            background-color: #2e2e2e !important;
+        }
+        .header-card h3 {
+            color: #ffffff !important;
+        }
+        .content-card {
+            background-color: #1e1e1e !important;
+            color: #ffffff !important;
+        }
+        
+        .content-card .description {
+            border-bottom-color: #404040;
         }
     }
     </style>
@@ -159,50 +212,35 @@ temp_file_paths = []
 images = []  # Store PIL images for reuse
 
 if urls:
-    # Create a container for preview images with the same width as the form
-    preview_container = st.container()
-    with preview_container:
-        # Use the same column layout as the form
-        if st.session_state.get('mobile_view', False):
-            preview_col = st.columns([1])[0]  # Full width on mobile
-        else:
-            _, preview_col, _ = st.columns([1, 2, 1])  # Centered on desktop
-        
-        with preview_col:
-            st.markdown("<h3>Preview Images</h3>", unsafe_allow_html=True)
-            # Create columns for displaying images
-            cols = st.columns(min(3, len(urls)))  # Changed back to 3 columns
-            
-            for idx, url in enumerate(urls):
-                try:
-                    # Download image from URL
-                    response = requests.get(url)
-                    if response.status_code == 200:
-                        # Create temporary file
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
-                            temp_file.write(response.content)
-                            temp_file_path = temp_file.name
-                            temp_file_paths.append(temp_file_path)
-                            
-                            # Display image in a column
-                            with cols[idx % 3]:  # Changed back to 3
-                                image = PILImage.open(io.BytesIO(response.content))
-                                images.append(image.copy())  # Store a copy of the image
-                                st.image(image, caption=f"Image {idx + 1}", use_container_width=True)
-                                
-                                # Convert image to base64
-                                if image.mode in ("RGBA", "LA"):
-                                    image = image.convert("RGB")
-                                image.thumbnail((300, 300))  # Resize to reduce size
-                                buffer = io.BytesIO()
-                                image.save(buffer, format="JPEG", quality=50)  # Compress and save as JPEG
-                                buffer.seek(0)
-                                encoded_image = base64.b64encode(buffer.read()).decode("utf-8")
-                                image_inputs.append(Part.from_image(Image.load_from_file(temp_file_path)))
-                    else:
-                        st.error(f"Failed to load image from URL {idx + 1}")
-                except Exception as e:
-                    st.error(f"Error processing image {idx + 1}: {str(e)}")
+    # Process images without preview
+    for idx, url in enumerate(urls):
+        try:
+            # Download image from URL
+            response = requests.get(url)
+            if response.status_code == 200:
+                # Create temporary file
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_file:
+                    temp_file.write(response.content)
+                    temp_file_path = temp_file.name
+                    temp_file_paths.append(temp_file_path)
+                    
+                    # Process image without displaying
+                    image = PILImage.open(io.BytesIO(response.content))
+                    images.append(image.copy())  # Store a copy of the image
+                    
+                    # Convert image to base64
+                    if image.mode in ("RGBA", "LA"):
+                        image = image.convert("RGB")
+                    image.thumbnail((300, 300))  # Resize to reduce size
+                    buffer = io.BytesIO()
+                    image.save(buffer, format="JPEG", quality=50)  # Compress and save as JPEG
+                    buffer.seek(0)
+                    encoded_image = base64.b64encode(buffer.read()).decode("utf-8")
+                    image_inputs.append(Part.from_image(Image.load_from_file(temp_file_path)))
+            else:
+                st.error(f"Failed to load image from URL {idx + 1}")
+        except Exception as e:
+            st.error(f"Error processing image {idx + 1}: {str(e)}")
 
 # Submit button
 if generate_button:
@@ -225,7 +263,7 @@ if generate_button:
                         with result_cols[j]:
                             idx = i + j
                             st.markdown(
-                                f"<div style='background-color: #f0f2f6; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;'><h3>Generated Reply for Image {idx + 1}</h3></div>",
+                                f"<div class='header-card'><h3>Generated Reply for Image {idx + 1}</h3></div>",
                                 unsafe_allow_html=True
                             )
                             
@@ -236,13 +274,25 @@ if generate_button:
                             
                             # Prepare inputs
                             inputs = []
-                            inputs.append("Describe the image and generate 10 captions based on the image. Should be witty, suggestive and humurous. It should just be one sentence/one liner")
+                            inputs.append("""Analyze the image and generate replies in the following format:
+1. First line should be a brief description of the image
+2. Then generate exactly 10 witty, flirty, and suggestive one-liner captions
+3. Each caption should include at least one emoji
+4. Format the output exactly like this:
+Description: [brief image description]
+1️⃣ [first caption]
+2️⃣ [second caption]
+3️⃣ [third caption]
+4️⃣ [fourth caption]
+5️⃣ [fifth caption]
+6️⃣ [sixth caption]
+7️⃣ [seventh caption]
+8️⃣ [eighth caption]
+9️⃣ [ninth caption]
+🔟 [tenth caption]""")
                             inputs.append(image_inputs[idx])
                             if user_prompt:
                                 inputs.append(user_prompt)
-                            
-                            inputs.append('Answer in this format and please add some emojis in the replies:')
-                            inputs.append('Description: \n, Reply 1: \n Reply 2: \n')
 
                             # Send the inputs to the model
                             response = chat.send_message(
@@ -251,10 +301,22 @@ if generate_button:
                                 safety_settings=safety_settings,
                             )
 
-                            # Display the generated reply in a card-like container
-                            response_text = response.text.replace('\n', '<br>')
+                            # Format the response with proper HTML structure
+                            response_lines = response.text.strip().split('\n')
+                            formatted_html = []
+                            
+                            for line in response_lines:
+                                line = line.strip()
+                                if line.startswith('Description:'):
+                                    formatted_html.append(f'<div class="description">{line}</div>')
+                                elif any(line.startswith(str(i)) for i in range(1, 10)) or line.startswith('10') or line.startswith('🔟'):
+                                    formatted_html.append(f'<div class="reply">{line}</div>')
+                            
+                            formatted_response = '\n'.join(formatted_html)
+                            
+                            # Display the formatted response
                             st.markdown(
-                                f"<div style='background-color: white; padding: 1rem; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.12);'>{response_text}</div>",
+                                f"<div class='content-card'>{formatted_response}</div>",
                                 unsafe_allow_html=True
                             )
                             st.markdown("<hr style='margin: 2rem 0;'>", unsafe_allow_html=True)
