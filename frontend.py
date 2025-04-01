@@ -60,7 +60,39 @@ st.markdown("""
     .title-container h1 {
         font-size: 2.5rem;
         font-weight: bold;
-        color: #262730;
+        color: #262730 !important;
+    }
+    
+    /* Card styles with dark mode support */
+    .header-card {
+        background-color: #f0f2f6 !important;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    .header-card h3 {
+        color: #262730 !important;
+        margin: 0;
+    }
+    
+    .content-card {
+        background-color: #ffffff !important;
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        color: #262730 !important;
+    }
+    
+    .content-card .description {
+        font-weight: bold;
+        margin-bottom: 1rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .content-card .reply {
+        padding: 0.5rem 0;
+        margin: 0.25rem 0;
     }
     
     /* Responsive container */
@@ -85,6 +117,27 @@ st.markdown("""
         .results-container {
             flex-direction: row;
             flex-wrap: wrap;
+        }
+    }
+
+    /* Dark mode overrides */
+    @media (prefers-color-scheme: dark) {
+        .title-container h1 {
+            color: #ffffff !important;
+        }
+        .header-card {
+            background-color: #2e2e2e !important;
+        }
+        .header-card h3 {
+            color: #ffffff !important;
+        }
+        .content-card {
+            background-color: #1e1e1e !important;
+            color: #ffffff !important;
+        }
+        
+        .content-card .description {
+            border-bottom-color: #404040;
         }
     }
     </style>
@@ -226,10 +279,16 @@ if generate_button:
                                 ⚠️ **Only 10 captions. Do NOT exceed this limit.**  
 
                                 Format the response as follows, including emojis:  
-                                Caption 1: [Caption text] 😆  \n
-                                Caption 2: [Caption text] 🤭  \n
-                                ...  
-                                Caption 10: [Caption text] 🎭  \n
+                                1️⃣ [first caption]
+                                2️⃣ [second caption]
+                                3️⃣ [third caption]
+                                4️⃣ [fourth caption]
+                                5️⃣ [fifth caption]
+                                6️⃣ [sixth caption]
+                                7️⃣ [seventh caption]
+                                8️⃣ [eighth caption]
+                                9️⃣ [ninth caption]
+                                🔟 [tenth caption]""")
                             '''
                             if user_prompt:
                                 prompt += user_prompt
@@ -243,12 +302,27 @@ if generate_button:
                                         "top_p": TOP_P,
                                     },
                                 ]
-                            response = predict(instances)
-                            print(response)
+                            
                             # Display the generated reply in a card-like container
-                            response_text = response[0].split('Output')[1].replace('\n', '<br>')
+                            response = predict(instances)
+                            response_text = response[0].split('Output')[1]
+                            
+                            # Format the response with proper HTML structure
+                            response_lines = response_text.strip().split('\n')
+                            formatted_html = []
+                            
+                            for line in response_lines:
+                                line = line.strip()
+                                if line.startswith('Description:'):
+                                    formatted_html.append(f'<div class="description">{line}</div>')
+                                elif any(line.startswith(str(i)) for i in range(1, 10)) or line.startswith('10') or line.startswith('🔟'):
+                                    formatted_html.append(f'<div class="reply">{line}</div>')
+                            
+                            formatted_response = '\n'.join(formatted_html)
+                            print(formatted_response)
+                            # Display the formatted response
                             st.markdown(
-                                f"<div style='background-color: white; padding: 1rem; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.12);'>{response_text}</div>",
+                                f"<div class='content-card'>{formatted_response}</div>",
                                 unsafe_allow_html=True
                             )
                             st.markdown("<hr style='margin: 2rem 0;'>", unsafe_allow_html=True)
