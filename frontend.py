@@ -9,6 +9,10 @@ import os
 import json
 import requests
 from google.oauth2 import service_account
+import pyperclip
+import time
+from datetime import datetime
+import re
 
 # Set page config to wide mode
 st.set_page_config(layout="wide")
@@ -27,6 +31,43 @@ def is_mobile():
 if 'mobile_view' not in st.session_state:
     st.session_state.mobile_view = is_mobile()
 
+# Add this after the session state initialization
+if 'last_copy_time' not in st.session_state:
+    st.session_state.last_copy_time = datetime.now()
+if 'copied_text' not in st.session_state:
+    st.session_state.copied_text = ""
+if 'copied_captions' not in st.session_state:
+    st.session_state.copied_captions = set()
+if 'button_states' not in st.session_state:
+    st.session_state.button_states = {}
+
+def copy_and_mark(text, key):
+    """Helper function to copy text and update session state"""
+    pyperclip.copy(text)
+    st.session_state.copied_captions.add(key)
+    time.sleep(0.1)  # Small delay to prevent rapid clicking
+
+def handle_copy(text, button_id):
+    """Handle copy action and button state"""
+    if button_id not in st.session_state.button_states:
+        st.session_state.button_states[button_id] = "📋"
+    
+    if st.session_state.button_states[button_id] == "📋":
+        pyperclip.copy(text)
+        st.session_state.button_states[button_id] = "✅"
+    else:
+        st.session_state.button_states[button_id] = "📋"
+
+def copy_text(text, button_id):
+    """Copy text and update button state"""
+    pyperclip.copy(text)
+    st.session_state.button_states[button_id] = True
+
+def copy_to_clipboard(text):
+    """Copy text to clipboard"""
+    pyperclip.copy(text)
+    st.toast("Copied to clipboard!", icon="✅")
+
 # Custom CSS for responsive design
 st.markdown("""
     <style>
@@ -44,34 +85,56 @@ st.markdown("""
     .title-container h1 {
         font-size: 2.5rem;
         font-weight: bold;
-        color: #262730 !important;
     }
     
     /* Card styles with dark mode support */
     .header-card {
-        background-color: #f0f2f6 !important;
-        padding: 1rem;
+        padding: 0.5rem;
         border-radius: 0.5rem;
         margin-bottom: 1rem;
+        background-color: #161a1d;
+        color: var(--text-color, #262730);
+        border: none;
     }
+    
     .header-card h3 {
-        color: #262730 !important;
         margin: 0;
+        color: inherit;
+        font-size: 1.1rem;
+        font-weight: 700;
     }
     
     .content-card {
-        background-color: #ffffff !important;
         padding: 1.5rem;
         border-radius: 0.5rem;
         box-shadow: 0 1px 3px rgba(0,0,0,0.12);
-        color: #262730 !important;
+        background-color: var(--content-bg-color, #ffffff);
+        color: var(--text-color, #262730);
+    }
+    
+    /* Code block custom styling */
+    .stCodeBlock {
+        margin-bottom: 0.5rem;
+    }
+    
+    .stCodeBlock pre {
+        background-color: var(--code-bg-color, #f8f9fa);
+        border-radius: 0.25rem;
+        border: none !important;
     }
     
     .content-card .description {
-        font-weight: bold;
+        font-weight: normal;
         margin-bottom: 1rem;
         padding-bottom: 0.5rem;
-        border-bottom: 1px solid #e0e0e0;
+        border-bottom: 1px solid var(--border-color, #e0e0e0);
+        color: inherit;
+        background-color: inherit;
+    }
+    
+    .desc-label {
+        font-weight: bold;
+        color: inherit;
     }
     
     .content-card .reply {
@@ -97,31 +160,192 @@ st.markdown("""
         padding: 1rem;
     }
     
-    @media (min-width: 641px) {
-        .results-container {
-            flex-direction: row;
-            flex-wrap: wrap;
+    /* Caption container styles with dark mode support */
+    .caption-container {
+        border-radius: 6px;
+        padding: 8px 12px;
+        margin: 4px 0;
+        transition: background-color 0.2s;
+        background-color: var(--code-bg-color, #f8f9fa);
+    }
+    
+    .caption-container:hover {
+        background-color: var(--code-hover-color, #f0f2f6);
+    }
+    
+    /* Copy button styles */
+    div[data-testid="stButton"] > button {
+        background-color: var(--content-bg-color) !important;
+        color: var(--text-color) !important;
+        border: 1px solid var(--border-color) !important;
+        border-radius: 4px;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    
+    div[data-testid="stButton"] > button:hover {
+        border-color: #888888 !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+        transform: translateY(-1px);
+    }
+    
+    div[data-testid="stButton"] > button:active {
+        transform: translateY(0px);
+    }
+    
+    /* Horizontal rule styling */
+    hr {
+        border-color: var(--border-color) !important;
+    }
+    
+    .caption-row {
+        display: flex;
+        align-items: center;
+        padding: 8px 12px;
+        border-radius: 4px;
+        margin: 4px 0;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        background-color: var(--code-bg-color, #f8f9fa);
+    }
+    
+    .caption-row:hover {
+        background-color: var(--code-hover-color, #e9ecef);
+    }
+    
+    .caption-text {
+        flex-grow: 1;
+        margin-right: 8px;
+    }
+    
+    /* Hide the text input but keep it accessible */
+    .hidden-input {
+        position: absolute;
+        left: -9999px;
+    }
+    
+    /* Text area custom styling */
+    .stTextArea textarea {
+        min-height: 70px !important;
+        padding: 8px !important;
+        font-size: 14px !important;
+        line-height: 1.5 !important;
+        resize: none !important;
+        overflow: hidden !important;
+    }
+    
+    /* Center the clipboard icon */
+    .clipboard-icon {
+        height: 70px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+    }
+    
+    /* General styling for all themes */
+    :root {
+        --background-color: #f0f2f6;
+        --content-bg-color: #ffffff;
+        --text-color: #262730;
+        --border-color: #e0e0e0;
+        --code-bg-color: #f5f5f5;
+        --code-hover-color: #e6e6e6;
+    }
+    
+    /* Dark mode vars */
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --background-color: #0e1117;
+            --content-bg-color: #161a1d;
+            --text-color: #ffffff;
+            --border-color: #363636;
+            --code-bg-color: #161a1d;
+            --code-hover-color: #232323;
         }
     }
-
-    /* Dark mode overrides */
+    
+    /* Dark mode support */
     @media (prefers-color-scheme: dark) {
+        /* Override Streamlit's code block styling for dark mode */
+        .stCodeBlock pre {
+            background-color: var(--code-bg-color, #161a1d) !important;
+            color: #e6e6e6 !important;
+        }
+        
+        /* Title text color */
         .title-container h1 {
             color: #ffffff !important;
         }
-        .header-card {
-            background-color: #2e2e2e !important;
+        
+        /* Ensure the bullet numbers are visible in dark mode */
+        .stCodeBlock::before {
+            background-color: var(--code-bg-color, #161a1d) !important;
+            color: #e6e6e6 !important;
         }
-        .header-card h3 {
-            color: #ffffff !important;
-        }
+        
+        /* Content card styling for dark mode */
         .content-card {
-            background-color: #1e1e1e !important;
-            color: #ffffff !important;
+            background-color: var(--content-bg-color, #161a1d) !important;
+            border: none !important;
+            color: var(--text-color, #ffffff) !important;
+        }
+        
+        /* Description styling for dark mode */
+        .content-card .description {
+            color: var(--text-color, #ffffff) !important;
+            border-bottom-color: var(--border-color, #363636) !important;
+            background-color: inherit !important;
+        }
+        
+        /* Make all Streamlit elements follow dark theme */
+        .stTextInput label, .stTextArea label {
+            color: var(--text-color) !important;
+        }
+        
+        hr {
+            border-color: var(--border-color) !important;
+        }
+        
+        /* Header card for dark mode */
+        .header-card {
+            background-color: #161a1d;
+            color: #ffffff;
+        }
+        
+        /* Override Streamlit's default background for dark mode */
+        .stApp {
+            background-color: #0e1117 !important;
+        }
+    }
+    
+    /* Light mode specific styles */
+    @media (prefers-color-scheme: light) {
+        .header-card {
+            background-color: #f7f7f7;
+            color: #262730;
+        }
+        
+        .content-card {
+            background-color: #ffffff !important;
         }
         
         .content-card .description {
-            border-bottom-color: #404040;
+            color: #262730 !important;
+            border-bottom-color: #e0e0e0 !important;
+            background-color: inherit !important;
+        }
+        
+        /* Ensure buttons look good in light mode too */
+        div[data-testid="stButton"] > button {
+            background-color: #f0f2f6 !important;
+            color: #262730 !important;
+            border: 1px solid #e0e0e0 !important;
+        }
+        
+        div[data-testid="stButton"] > button:hover {
+            background-color: #e6e6e6 !important;
         }
     }
     </style>
@@ -308,12 +532,75 @@ Description: [brief image description]
                             for line in response_lines:
                                 line = line.strip()
                                 if line.startswith('Description:'):
-                                    formatted_html.append(f'<div class="description">{line}</div>')
+                                    description_parts = line.split(':', 1)
+                                    label = description_parts[0]
+                                    desc_content = description_parts[1].strip() if len(description_parts) > 1 else ""
+                                    formatted_html.append(f'<div class="description"><span class="desc-label">{label}:</span> {desc_content}</div>')
                                 elif any(line.startswith(str(i)) for i in range(1, 10)) or line.startswith('10') or line.startswith('🔟'):
-                                    formatted_html.append(f'<div class="reply">{line}</div>')
-                            
+                                    # Extract just the caption text without number emoji
+                                    if any(line.startswith(emoji) for emoji in ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']):
+                                        # These are usually followed by a space
+                                        parts = line.split(' ', 1)
+                                        bullet = parts[0]
+                                        if len(parts) > 1:
+                                            caption_text = parts[1]
+                                        else:
+                                            caption_text = ""
+                                    elif line[0].isdigit():
+                                        # For regular numbers, find where number ends
+                                        match = re.search(r"^(\d+[\.:]?\s+)", line)
+                                        if match:
+                                            bullet = match.group(1).strip()
+                                            caption_text = line[match.end():]
+                                        else:
+                                            bullet = ""
+                                            caption_text = line
+                                    else:
+                                        bullet = ""
+                                        caption_text = line
+                                    
+                                    # Display just the caption text (what will be copied)
+                                    st.code(caption_text, language=None)
+                                    
+                                    # Add CSS to display the number before the code block
+                                    element_id = f"caption_{hash(line)}"
+                                    st.markdown(f"""
+                                        <style>
+                                        .stCodeBlock:last-of-type::before {{
+                                            content: "{bullet} ";
+                                            font-family: monospace;
+                                            position: absolute;
+                                            left: 6px;
+                                            z-index: 1;
+                                            background-color: inherit;
+                                            color: inherit;
+                                            padding: 0 4px;
+                                        }}
+                                        </style>
+                                    """, unsafe_allow_html=True)
+
                             formatted_response = '\n'.join(formatted_html)
                             
+                            # Add global script to modify clipboard behavior when copying
+                            st.markdown("""
+                            <script>
+                            document.addEventListener('copy', function(e) {
+                                const selection = window.getSelection();
+                                const text = selection.toString();
+                                
+                                // Check if the text starts with a number or emoji number
+                                if (/^[0-9️⃣🔟]/.test(text)) {
+                                    // Remove the number prefix
+                                    const modifiedText = text.replace(/^[0-9️⃣🔟]+[\s\.]+/, '');
+                                    
+                                    // Set the modified text in the clipboard
+                                    e.clipboardData.setData('text/plain', modifiedText);
+                                    e.preventDefault();
+                                }
+                            });
+                            </script>
+                            """, unsafe_allow_html=True)
+
                             # Display the formatted response
                             st.markdown(
                                 f"<div class='content-card'>{formatted_response}</div>",
