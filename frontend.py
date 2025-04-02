@@ -307,7 +307,6 @@ if generate_button:
                             response = predict(instances)
                             response_text = response[0].split('Output')[1]
                             
-                            
                             # Format the response with proper HTML structure
                             response_lines = response_text.strip().split('\n')
                             formatted_html = []
