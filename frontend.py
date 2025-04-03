@@ -5,6 +5,7 @@ import io
 import tempfile
 import os
 import json
+import re
 import requests
 from google.oauth2 import service_account
 from google.cloud import aiplatform
@@ -15,9 +16,10 @@ load_dotenv()
 ENDPOINT = aiplatform.Endpoint(
     endpoint_name=os.environ['ENDPOINT_NAME']
 )
-MAX_TOKENS = 256
+MAX_TOKENS = 250
 TEMPERATURE = 1
 TOP_P = 0.95
+MAX_RETRIES = 3  # Set max retries in case of insufficient captions
 
 def predict(instances):
     """Send prediction request to the endpoint."""
@@ -26,6 +28,32 @@ def predict(instances):
         return response.predictions
     else:
         return response
+    
+def extract_captions(response_text):
+    response_lines = response_text.strip().split("\n")
+    captions = []
+
+    for line in response_lines:
+        line = line.strip()
+
+        # Check if the line starts with a numbered emoji or digit (caption format)
+        if any(line.startswith(str(i)) for i in range(1, 10)) or line.startswith("10") or line.startswith("🔟"):
+            if any(line.startswith(emoji) for emoji in ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']):
+                parts = line.split(" ", 1)
+                if len(parts) > 1:
+                    captions.append(parts[1])
+            elif line[0].isdigit():
+                match = re.search(r"^(\d+[\.:]?\s+)", line)
+                if match:
+                    captions.append(line[match.end():])
+            else:
+                captions.append(line)
+        elif len(re.findall(r'\b\w+\b', line)) > 3:  # If it's a valid caption (more than 3 words)
+            captions.append(line)
+    
+    return captions
+
+
 # Set page config to wide mode
 st.set_page_config(layout="wide")
 
@@ -143,18 +171,34 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Load service account credentials
-# s
+def parse_llm_response(response):
+    """
+    Parses the LLM-generated response to extract exactly 10 captions, handling both structured and unstructured formats.
+    """
 
-# Create credentials object
-# credentials = service_account.Credentials.from_service_account_info(credentials_dict)
+    if "Output" in response[0]:
+        response_text = response[0].split("Output", 1)[-1]
+        return response_text
+    else:
+        response_text = response
+        
+        # Split by newlines and strip spaces
+        lines = [line.strip() for line in response_text.split("\n") if line.strip()]
+        print('response_text in else',response)
+        # Try extracting structured captions (1️⃣, 2️⃣, etc.)
+        structured_captions = re.findall(r'(\d️⃣|🔟)\s+(.+)', response_text)
 
-# Generation config for Vertex AI
-generation_config = {
-    "max_output_tokens": 8192,
-    "temperature": 1,
-    "top_p": 0.95,
-}
+        if structured_captions:
+            # If structured format is found, return the cleaned captions
+            captions = [f"{num} {text}" for num, text in structured_captions]
+        else:
+            # If unstructured format, filter out empty lines and emojis at the end
+            cleaned_lines = [line for line in lines if not re.fullmatch(r"[^\w]+", line)]
+            
+            # Ensure we get only 10 captions
+            captions = cleaned_lines[:10]
+
+        return captions
 
 
 # Streamlit app
@@ -290,6 +334,7 @@ if generate_button:
                                 9️⃣ [ninth caption]
                                 🔟 [tenth caption]""")
                             '''
+
                             if user_prompt:
                                 prompt += user_prompt
                             
@@ -303,29 +348,56 @@ if generate_button:
                                     },
                                 ]
                             
-                            # Display the generated reply in a card-like container
-                            response = predict(instances)
-                            response_text = response[0].split('Output')[1]
-                            
-                            # Format the response with proper HTML structure
-                            response_lines = response_text.strip().split('\n')
-                            formatted_html = []
-                            
-                            for line in response_lines:
-                                line = line.strip()
-                                if line.startswith('Description:'):
-                                    formatted_html.append(f'<div class="description">{line}</div>')
-                                elif any(line.startswith(str(i)) for i in range(1, 10)) or line.startswith('10') or line.startswith('🔟'):
-                                    formatted_html.append(f'<div class="reply">{line}</div>')
-                            
-                            formatted_response = '\n'.join(formatted_html)
-                            print(formatted_response)
-                            # Display the formatted response
-                            st.markdown(
-                                f"<div class='content-card'>{formatted_response}</div>",
-                                unsafe_allow_html=True
-                            )
-                            st.markdown("<hr style='margin: 2rem 0;'>", unsafe_allow_html=True)
+                            # Retry loop to ensure at least 5 captions are generated
+                            retry_count = 0
+                            captions = []
+
+                            while retry_count < MAX_RETRIES:
+                                response = predict(instances)
+                                response_text = parse_llm_response(response)
+
+                                captions = extract_captions(response_text)
+                                
+                                if len(captions) >= 6:
+                                    break  # Stop retrying if at least 5 captions are found
+
+                                retry_count += 1  # Increment retry counter
+
+                            # Ensure there are always 10 captions, adding empty ones at the end
+                            captions.extend([""] * (10 - len(captions)))
+
+                            # Define fixed height for each caption block
+                            fixed_height = "50px"  # Adjust as needed
+
+                            # Display Captions
+                            for caption_text in captions:
+                                if caption_text.strip():  
+                                    st.code(caption_text, language=None)
+                                else:  
+                                    st.markdown(
+                                        f"<div style='min-height: {fixed_height}; background-color: #2b2b2b; border-radius: 5px; padding: 8px;'>&nbsp;</div>",
+                                        unsafe_allow_html=True
+                                    )
+
+                            # Add global script to modify clipboard behavior when copying
+                            st.markdown("""
+                            <script>
+                            document.addEventListener('copy', function(e) {
+                                const selection = window.getSelection();
+                                const text = selection.toString();
+                                
+                                // Check if the text starts with a number or emoji number
+                                if (/^[0-9️⃣🔟]/.test(text)) {
+                                    // Remove the number prefix
+                                    const modifiedText = text.replace(/^[0-9️⃣🔟]+[\s\.]+/, '');
+                                    
+                                    // Set the modified text in the clipboard
+                                    e.clipboardData.setData('text/plain', modifiedText);
+                                    e.preventDefault();
+                                }
+                            });
+                            </script>
+                            """, unsafe_allow_html=True)
 
             # Clean up temporary files
             for temp_file_path in temp_file_paths:
